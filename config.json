@@ -1,0 +1,14 @@
+{
+  "DemoMode": true,
+  "DB": {
+    "DBName": "unionbase",
+    "Host": "localhost",
+    "Port": 5433,
+    "User": "postgres",
+    "Password": "postgres"
+  },
+  "Eth": {
+    "NodeURL": "https://rinkeby.infura.io/v3/67252384c77541e6af97f308434bd391",
+    "QueryPause": 15000
+  }
+}

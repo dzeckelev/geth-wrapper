@@ -10,3 +10,9 @@
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+
+# Idea files
+.idea
+
+# Reform generated files
+data/data_reform.go
