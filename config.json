@@ -8,7 +8,7 @@
   },
   "Eth": {
     "NodeURL": "http://localhost:8545",
-    "StartBlock": 3912500
+    "StartBlock": 3915904
   },
   "API": {
     "Addr": "localhost:8081"
@@ -17,8 +17,5 @@
     "UpdateLastBlockPause": 15000,
     "CollectPause": 15000,
     "UpdateTransactionsPause": 20000
-  },
-  "Import": {
-    "AccountInbox": "inbox"
   }
 }

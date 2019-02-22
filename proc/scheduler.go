@@ -4,30 +4,32 @@ import (
 	"context"
 	"log"
 	"math/big"
+	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/dzeckelev/geth-wrapper/config"
 	"github.com/dzeckelev/geth-wrapper/data"
+	"github.com/dzeckelev/geth-wrapper/eth"
 	"github.com/dzeckelev/geth-wrapper/gen"
 
 	"github.com/AlekSi/pointer"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/pkg/errors"
 	"gopkg.in/reform.v1"
 )
 
 // Scheduler is a task scheduler.
 type Scheduler struct {
-	netID  *big.Int
-	cfg    *config.Config
-	cancel context.CancelFunc
-	ctx    context.Context
-	eth    *ethclient.Client
-	db     *reform.DB
+	netID    *big.Int
+	cfg      *config.Config
+	cancel   context.CancelFunc
+	ctx      context.Context
+	eth      *eth.Client
+	db       *reform.DB
+	updBalCh chan []string
 
 	mtx          sync.RWMutex
 	lastBlockNum *big.Int
@@ -37,32 +39,34 @@ type Scheduler struct {
 
 // NewScheduler creates a new task scheduler.
 func NewScheduler(ctx context.Context, networkID *big.Int, cfg *config.Config,
-	database *reform.DB, ethClient *ethclient.Client) (*Scheduler, error) {
+	database *reform.DB, ethClient *eth.Client) (*Scheduler, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	return &Scheduler{
-		netID:  networkID,
-		cfg:    cfg,
-		cancel: cancel,
-		ctx:    ctx,
-		db:     database,
-		eth:    ethClient,
+		netID:    networkID,
+		cfg:      cfg,
+		cancel:   cancel,
+		ctx:      ctx,
+		db:       database,
+		eth:      ethClient,
+		updBalCh: make(chan []string, 1000),
 	}, nil
 }
 
 // Start starts a task scheduler.
 func (s *Scheduler) Start() error {
-	last, err := s.eth.BlockByNumber(s.ctx, nil)
+	last, err := s.eth.EthCli().BlockByNumber(s.ctx, nil)
 	if err != nil {
 		return err
 	}
 
 	s.lastBlockNum = last.Number()
-	s.wg.Add(3)
+	s.wg.Add(4)
 
 	go s.updateLastBlock()
 	go s.updateTransactions()
 	go s.collect()
+	go s.updateAccounts()
 
 	return nil
 }
@@ -79,11 +83,10 @@ func (s *Scheduler) updateLastBlock() {
 
 	tic := time.NewTicker(time.Millisecond *
 		time.Duration(s.cfg.Proc.UpdateLastBlockPause))
-
 	for {
 		select {
 		case <-tic.C:
-			block, err := s.eth.BlockByNumber(s.ctx, nil)
+			block, err := s.eth.EthCli().BlockByNumber(s.ctx, nil)
 			if err != nil {
 				log.Printf("failed to get last block: %s", err)
 				continue
@@ -130,29 +133,62 @@ func (s *Scheduler) collect() {
 		default:
 		}
 
-		if err := s.collectData(); err != nil {
+		if err := s.collectTxs(); err != nil {
 			log.Printf("failed to collect data: %s", err)
 		}
 		time.Sleep(time.Millisecond * time.Duration(s.cfg.Proc.CollectPause))
 	}
 }
 
-func (s *Scheduler) collectData() error {
+func (s *Scheduler) getAccounts() (map[common.Address]struct{}, error) {
+	acs, err := s.eth.Accounts(s.ctx)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[common.Address]struct{})
+	for k := range acs {
+		m[common.HexToAddress(acs[k])] = struct{}{}
+	}
+	return m, nil
+}
+
+func targetAccounts(accounts map[common.Address]struct{},
+	from, to common.Address) (result []string) {
+	if _, ok := accounts[from]; ok {
+		result = append(result, strings.ToLower(from.String()))
+	}
+
+	if _, ok := accounts[to]; ok {
+		result = append(result, strings.ToLower(from.String()))
+	}
+
+	return result
+}
+
+func (s *Scheduler) startBlock() (*big.Int, error) {
 	startBlock, err := s.lastBlockFromDB()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if s.cfg.Eth.StartBlock > startBlock {
 		startBlock = s.cfg.Eth.StartBlock
 	}
 
-	current := new(big.Int).SetUint64(startBlock)
-	signer := types.NewEIP155Signer(s.netID)
+	return new(big.Int).SetUint64(startBlock), nil
+}
 
-	incCurrentBlockNum := func() {
+func (s *Scheduler) collectTxs() error {
+	current, err := s.startBlock()
+	if err != nil {
+		return err
+	}
+
+	increaseBlockNum := func() {
 		current = new(big.Int).Add(current, big.NewInt(1))
 	}
+
+	signer := types.NewEIP155Signer(s.netID)
 
 	for {
 		s.mtx.RLock()
@@ -162,24 +198,29 @@ func (s *Scheduler) collectData() error {
 		if current.Cmp(lastBlock) > 0 {
 			time.Sleep(time.Millisecond *
 				time.Duration(s.cfg.Proc.CollectPause))
+
+			log.Printf("current block %s, lastBlock block %s",
+				current.String(), lastBlock.String())
+			continue
 		}
 
-		currentBlock, err := s.eth.BlockByNumber(s.ctx, current)
+		accounts, err := s.getAccounts()
 		if err != nil {
 			return err
 		}
 
-		var result struct {
-			txs []*data.Transaction
-			acc []*data.Account
+		block, err := s.eth.EthCli().BlockByNumber(s.ctx, current)
+		if err != nil {
+			return err
 		}
 
-		txs := currentBlock.Transactions()
+		txs := block.Transactions()
+
 		log.Printf("block: %d, transactions: %d",
-			currentBlock.Number(), len(txs))
+			block.Number(), len(txs))
 
 		if len(txs) == 0 {
-			incCurrentBlockNum()
+			increaseBlockNum()
 			if err := s.updateLastBlockSetting(current); err != nil {
 				return err
 			}
@@ -187,116 +228,109 @@ func (s *Scheduler) collectData() error {
 		}
 
 		var confirm uint64
-
-		if lastBlock.Cmp(currentBlock.Number()) >= 0 {
+		if lastBlock.Cmp(block.Number()) >= 0 {
 			confirm = new(big.Int).Sub(lastBlock,
-				currentBlock.Number()).Uint64()
+				block.Number()).Uint64()
 		}
 
+		var accountsToUpd []string
+
+		concurrency := runtime.NumCPU()
+		sem := make(chan struct{}, concurrency)
+
+		resultMtx := sync.Mutex{}
+		var result []*data.Transaction
+
 		for k := range txs {
-			hash := txs[k].Hash().String()
-			from, err := signer.Sender(txs[k])
-			if err != nil {
-				log.Printf("invalid transaction %s: %s",
-					txs[k].Hash().String(), err)
-				continue
-			}
+			sem <- struct{}{}
 
-			tx := &data.Transaction{
-				ID:            gen.NewUUID(),
-				Hash:          hash,
-				From:          from.String(),
-				Amount:        txs[k].Value().String(),
-				ReceiptBlock:  pointer.ToUint64(currentBlock.Number().Uint64()),
-				Timestamp:     pointer.ToUint64(currentBlock.Time().Uint64()),
-				Confirmations: confirm,
-			}
+			go func(k int) {
+				defer func() { <-sem }()
 
-			tr, err := s.eth.TransactionReceipt(s.ctx, txs[k].Hash())
-			if err != nil {
-				return err
-			}
-
-			switch tr.Status {
-			case types.ReceiptStatusFailed:
-				tx.Status = pointer.ToString(data.TxFailed)
-			case types.ReceiptStatusSuccessful:
-				tx.Status = pointer.ToString(data.TxSuccessful)
-			default:
-				return errors.New("unknown status")
-			}
-
-			if txs[k].To() == nil {
-				tx.To = tr.ContractAddress.String()
-			} else {
-				tx.Confirmations = confirm
-				tx.To = txs[k].To().String()
-			}
-
-			result.txs = append(result.txs, tx)
-
-			updateAccount := func(addr common.Address) error {
-				balance, err := s.eth.BalanceAt(
-					s.ctx, addr, currentBlock.Number())
+				hash := txs[k].Hash().String()
+				from, err := signer.Sender(txs[k])
 				if err != nil {
-					return err
+					log.Printf("invalid transaction %s: %s",
+						txs[k].Hash().String(), err)
+					return
 				}
 
-				acc := &data.Account{}
-				if err := s.db.FindOneTo(acc, "public_key",
-					addr.String()); err != nil {
-					if err == reform.ErrNoRows {
-						acc.ID = gen.NewUUID()
-						acc.PublicKey = addr.String()
-						acc.LastBlock = currentBlock.Number().Uint64()
-					} else {
-						return err
-					}
+				tr, err := s.eth.EthCli().TransactionReceipt(s.ctx,
+					txs[k].Hash())
+				if err != nil {
+					log.Printf("failed to get transaction receipt: %s", err)
+					return
 				}
 
-				if currentBlock.Number().Uint64() >= acc.LastBlock {
-					acc.Balance = balance.String()
+				var to common.Address
+
+				if txs[k].To() != nil {
+					to = *txs[k].To()
+				} else {
+					to = tr.ContractAddress
 				}
 
-				acc.LastUpdate = pointer.ToTime(time.Now())
-				result.acc = append(result.acc, acc)
-				return nil
-			}
+				acc := targetAccounts(accounts, from, to)
 
-			if txs[k].To() != nil {
-				if err := updateAccount(*txs[k].To()); err != nil {
-					return err
+				if len(acc) == 0 {
+					return
 				}
-			}
 
-			if err := updateAccount(from); err != nil {
-				return err
-			}
+				tx := &data.Transaction{
+					ID:     gen.NewUUID(),
+					Hash:   hash,
+					From:   strings.ToLower(from.String()),
+					To:     strings.ToLower(to.String()),
+					Amount: txs[k].Value().String(),
+					Block: pointer.ToUint64(
+						block.Number().Uint64()),
+					Timestamp: pointer.ToUint64(
+						block.Time().Uint64()),
+					Confirmations: confirm,
+				}
+
+				switch tr.Status {
+				case types.ReceiptStatusFailed:
+					tx.Status = pointer.ToString(data.TxFailed)
+				case types.ReceiptStatusSuccessful:
+					tx.Status = pointer.ToString(data.TxSuccessful)
+				default:
+					log.Printf("unknown status transaction status: %s", hash)
+					return
+				}
+
+				resultMtx.Lock()
+				accountsToUpd = append(accountsToUpd, acc...)
+				result = append(result, tx)
+				resultMtx.Unlock()
+			}(k)
+		}
+
+		for i := 0; i < cap(sem); i++ {
+			sem <- struct{}{}
+		}
+
+		select {
+		case s.updBalCh <- accountsToUpd:
+		// TODO: hardcoded timeout
+		case <-time.After(time.Second):
 		}
 
 		if err := s.db.InTransaction(func(t *reform.TX) error {
-			for k := range result.txs {
-				err := t.Insert(result.txs[k])
+			for k := range result {
+				err := t.Insert(result[k])
 				if err != nil {
 					return err
 				}
 			}
-
-			for k := range result.txs {
-				err := t.Save(result.acc[k])
-				if err != nil {
-					return err
-				}
-			}
-
 			return nil
 		}); err != nil {
-			log.Printf("failed to processed currentBlock %s, error: %v",
-				currentBlock.Number(), err)
+			log.Printf("failed to processed block %s, error: %v",
+				block.Number(), err)
 			continue
 		}
 
-		incCurrentBlockNum()
+		increaseBlockNum()
 		if err := s.updateLastBlockSetting(current); err != nil {
 			return err
 		}
@@ -320,8 +354,8 @@ func (s *Scheduler) updateTransactions() {
 		for k := range items {
 			tx := *items[k].(*data.Transaction)
 
-			if tx.ReceiptBlock != nil && lastBlock > *tx.ReceiptBlock {
-				confirm := lastBlock - *tx.ReceiptBlock
+			if tx.Block != nil && lastBlock > *tx.Block {
+				confirm := lastBlock - *tx.Block
 
 				if confirm > tx.Confirmations {
 					tx.Confirmations = confirm
@@ -336,7 +370,7 @@ func (s *Scheduler) updateTransactions() {
 		return nil
 	}
 
-	tic := time.NewTicker(time.Second *
+	tic := time.NewTicker(time.Millisecond *
 		time.Duration(s.cfg.Proc.UpdateTransactionsPause))
 	for {
 		select {
@@ -346,6 +380,59 @@ func (s *Scheduler) updateTransactions() {
 			}
 		case <-s.ctx.Done():
 			tic.Stop()
+			return
+		}
+	}
+}
+
+func (s *Scheduler) updateAccounts() {
+	defer s.wg.Done()
+
+	update := func(accounts []string) {
+		for k := range accounts {
+			balance, err := s.eth.EthCli().BalanceAt(
+				s.ctx, common.HexToAddress(accounts[k]), nil)
+			if err != nil {
+				log.Printf("failed to get account balance: %s", err)
+				return
+			}
+
+			account := &data.Account{}
+			if err := s.db.FindOneTo(account,
+				"public_key", accounts[k]); err != nil {
+				if err != reform.ErrNoRows {
+					log.Printf("failed to find account: %s", err)
+					return
+				}
+
+				account.ID = gen.NewUUID()
+				account.PublicKey = accounts[k]
+			}
+
+			account.Balance = balance.String()
+
+			if err := s.db.Save(account); err != nil {
+				log.Printf("failed to save account: %s", err)
+				return
+			}
+		}
+	}
+
+	accounts, err := s.eth.Accounts(s.ctx)
+	if err != nil {
+		log.Printf("failed to get accounts: %s", err)
+		return
+	}
+	update(accounts)
+
+	for {
+		select {
+		case accounts, ok := <-s.updBalCh:
+			if !ok {
+				return
+			}
+			update(accounts)
+		case <-s.ctx.Done():
 			return
 		}
 	}

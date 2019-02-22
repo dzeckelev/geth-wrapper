@@ -34,6 +34,7 @@ type Proc struct {
 	UpdateLastBlockPause    uint64 // In milliseconds.
 	CollectPause            uint64 // In milliseconds.
 	UpdateTransactionsPause uint64 // In milliseconds.
+	SyncPause               uint64 // In milliseconds.
 }
 
 // NewConfig creates a default application configuration.
@@ -55,6 +56,7 @@ func NewConfig() *Config {
 			UpdateLastBlockPause:    15000,
 			CollectPause:            15000,
 			UpdateTransactionsPause: 20000,
+			SyncPause:               30000,
 		},
 	}
 }

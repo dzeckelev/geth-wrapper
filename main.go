@@ -6,11 +6,12 @@ import (
 	"flag"
 	"log"
 	"os"
+	"time"
 
 	"github.com/dzeckelev/geth-wrapper/api"
-	"github.com/dzeckelev/geth-wrapper/blockchain"
 	"github.com/dzeckelev/geth-wrapper/config"
 	"github.com/dzeckelev/geth-wrapper/db"
+	"github.com/dzeckelev/geth-wrapper/eth"
 	"github.com/dzeckelev/geth-wrapper/proc"
 )
 
@@ -27,6 +28,9 @@ func readConfig(name string, data interface{}) error {
 func main() {
 	cfg := config.NewConfig()
 	fConfig := flag.String("config", "config.json", "Configuration file path.")
+
+	flag.Parse()
+
 	if err := readConfig(*fConfig, cfg); err != nil {
 		log.Fatal(err)
 	}
@@ -34,13 +38,18 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ethClient, err := blockchain.NewClient(ctx, cfg.Eth)
+	ethClient, err := eth.NewClient(ctx, cfg.Eth.NodeURL)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer blockchain.Close(ethClient)
+	defer ethClient.Close()
 
-	netID, err := ethClient.NetworkID(ctx)
+	syncPause := time.Duration(cfg.Proc.SyncPause) * time.Millisecond
+	if err := eth.WaitSync(ctx, ethClient.EthCli(), syncPause); err != nil {
+		log.Fatal(err)
+	}
+
+	netID, err := ethClient.EthCli().NetworkID(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -51,13 +60,13 @@ func main() {
 	}
 	defer db.CloseDB(database)
 
-	pr, err := proc.NewScheduler(ctx, netID, cfg, database, ethClient)
+	scheduler, err := proc.NewScheduler(ctx, netID, cfg, database, ethClient)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer pr.Close()
+	defer scheduler.Close()
 
-	if err := pr.Start(); err != nil {
+	if err := scheduler.Start(); err != nil {
 		log.Fatal(err)
 	}
 
