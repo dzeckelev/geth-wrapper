@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+
 	"github.com/dzeckelev/geth-wrapper/config"
 
 	_ "github.com/lib/pq" // Need for postgres driver.
@@ -18,7 +19,7 @@ func ConnectArgs(cfg *config.DB) string {
 		cfg.DBName, cfg.Port)
 }
 
-// Connect connects to a cold database.
+// Connect connects to a database.
 func Connect(connectArgs string) (*reform.DB, error) {
 	conn, err := sql.Open("postgres", connectArgs)
 	if err == nil {
@@ -31,7 +32,7 @@ func Connect(connectArgs string) (*reform.DB, error) {
 	return reform.NewDB(conn, postgresql.Dialect, nil), nil
 }
 
-// Close closes database.
-func CloseDB(db *reform.DB) error {
-	return db.DBInterface().(*sql.DB).Close()
+// CloseDB closes database.
+func CloseDB(db *reform.DB) {
+	db.DBInterface().(*sql.DB).Close()
 }

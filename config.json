@@ -1,5 +1,4 @@
 {
-  "DemoMode": true,
   "DB": {
     "DBName": "unionbase",
     "Host": "localhost",
@@ -8,7 +7,18 @@
     "Password": "postgres"
   },
   "Eth": {
-    "NodeURL": "https://rinkeby.infura.io/v3/67252384c77541e6af97f308434bd391",
-    "QueryPause": 15000
+    "NodeURL": "http://localhost:8545",
+    "StartBlock": 3912500
+  },
+  "API": {
+    "Addr": "localhost:8081"
+  },
+  "Proc": {
+    "UpdateLastBlockPause": 15000,
+    "CollectPause": 15000,
+    "UpdateTransactionsPause": 20000
+  },
+  "Import": {
+    "AccountInbox": "inbox"
   }
 }
