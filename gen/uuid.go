@@ -1,8 +1,8 @@
 package gen
 
-import "github.com/pborman/uuid"
+import "github.com/satori/go.uuid"
 
 // NewUUID generates new UUID.
 func NewUUID() string {
-	return uuid.NewUUID().String()
+	return uuid.Must(uuid.NewV4()).String()
 }

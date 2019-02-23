@@ -159,7 +159,7 @@ func targetAccounts(accounts map[common.Address]struct{},
 	}
 
 	if _, ok := accounts[to]; ok {
-		result = append(result, strings.ToLower(from.String()))
+		result = append(result, strings.ToLower(to.String()))
 	}
 
 	return result
