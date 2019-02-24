@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dzeckelev/geth-wrapper/data"
@@ -18,6 +19,7 @@ import (
 
 // Handler is an API RPC handler.
 type Handler struct {
+	mtx       sync.Mutex
 	netID     *big.Int
 	db        *reform.DB
 	ethClient *eth.Client
@@ -25,6 +27,7 @@ type Handler struct {
 
 // GetLastResult is result of GetLast method.
 type GetLastResult struct {
+	Hash    string
 	Date    string
 	Address string
 	// In Wei (1 ETH = 10^18 Wai)
@@ -45,6 +48,9 @@ func NewHandler(networkID *big.Int,
 
 // GetLast returns latest transactions.
 func (h *Handler) GetLast(limit uint64) ([]GetLastResult, error) {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+
 	tail := fmt.Sprintf(`WHERE transactions."to" 
 		IN (SELECT public_key FROM accounts) 
 		AND (confirmations < %s OR NOT marked) ORDER BY block ASC LIMIT %s`,
@@ -72,6 +78,7 @@ func (h *Handler) GetLast(limit uint64) ([]GetLastResult, error) {
 		}
 
 		result[k] = GetLastResult{
+			Hash:          tx.Hash,
 			Date:          tm.Format(time.RFC3339),
 			Address:       tx.To,
 			Amount:        tx.Amount,
