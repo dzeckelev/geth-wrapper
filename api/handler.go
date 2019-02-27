@@ -89,8 +89,8 @@ func (h *Handler) GetLast(limit uint64) ([]GetLastResult, error) {
 	return result, nil
 }
 
-// SendEth sends ETH to specific address.
-func (h *Handler) SendEth(from, to, amount string) (*string, error) {
+// SendETH sends ETH to specific address.
+func (h *Handler) SendETH(from, to, amount string) (*string, error) {
 	if !common.IsHexAddress(from) {
 		return nil, errors.New(`invalid "from" argument`)
 	}
