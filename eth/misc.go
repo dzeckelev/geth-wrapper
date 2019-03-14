@@ -5,12 +5,10 @@ import (
 	"log"
 	"math/big"
 	"time"
-
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 // WaitSync waits for the synchronization of the Geth node.
-func WaitSync(ctx context.Context, client *ethclient.Client,
+func WaitSync(ctx context.Context, client GethClient,
 	pauseTime time.Duration) error {
 	for {
 		progress, err := client.SyncProgress(ctx)

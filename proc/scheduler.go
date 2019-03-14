@@ -10,15 +10,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dzeckelev/geth-wrapper/config"
-	"github.com/dzeckelev/geth-wrapper/data"
-	"github.com/dzeckelev/geth-wrapper/eth"
-	"github.com/dzeckelev/geth-wrapper/gen"
-
 	"github.com/AlekSi/pointer"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"gopkg.in/reform.v1"
+
+	"github.com/dzeckelev/geth-wrapper/config"
+	"github.com/dzeckelev/geth-wrapper/data"
+	"github.com/dzeckelev/geth-wrapper/eth"
+	"github.com/dzeckelev/geth-wrapper/gen"
 )
 
 // Scheduler is a task scheduler.
@@ -55,7 +55,7 @@ func NewScheduler(ctx context.Context, networkID *big.Int, cfg *config.Config,
 
 // Start starts a task scheduler.
 func (s *Scheduler) Start() error {
-	last, err := s.eth.EthCli().BlockByNumber(s.ctx, nil)
+	last, err := s.eth.BlockByNumber(s.ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (s *Scheduler) updateLastBlock() {
 	for {
 		select {
 		case <-tic.C:
-			block, err := s.eth.EthCli().BlockByNumber(s.ctx, nil)
+			block, err := s.eth.BlockByNumber(s.ctx, nil)
 			if err != nil {
 				log.Printf("failed to get last block: %s", err)
 				continue
@@ -209,7 +209,7 @@ func (s *Scheduler) collectTxs() error {
 			return err
 		}
 
-		block, err := s.eth.EthCli().BlockByNumber(s.ctx, current)
+		block, err := s.eth.BlockByNumber(s.ctx, current)
 		if err != nil {
 			return err
 		}
@@ -255,7 +255,7 @@ func (s *Scheduler) collectTxs() error {
 					return
 				}
 
-				tr, err := s.eth.EthCli().TransactionReceipt(s.ctx,
+				tr, err := s.eth.TransactionReceipt(s.ctx,
 					txs[k].Hash())
 				if err != nil {
 					log.Printf("failed to get transaction receipt: %s", err)
@@ -390,7 +390,7 @@ func (s *Scheduler) updateAccounts() {
 
 	update := func(accounts []string) {
 		for k := range accounts {
-			balance, err := s.eth.EthCli().BalanceAt(
+			balance, err := s.eth.BalanceAt(
 				s.ctx, common.HexToAddress(accounts[k]), nil)
 			if err != nil {
 				log.Printf("failed to get account balance: %s", err)

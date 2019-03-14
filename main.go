@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"log"
@@ -45,16 +46,24 @@ func main() {
 	defer ethClient.Close()
 
 	syncPause := time.Duration(cfg.Proc.SyncPause) * time.Millisecond
-	if err := eth.WaitSync(ctx, ethClient.EthCli(), syncPause); err != nil {
+	if err := eth.WaitSync(ctx, ethClient, syncPause); err != nil {
 		log.Fatal(err)
 	}
 
-	netID, err := ethClient.EthCli().NetworkID(ctx)
+	netID, err := ethClient.NetworkID(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	database, err := db.Connect(db.ConnectArgs(cfg.DB))
+	conn, err := sql.Open("postgres", db.ConnectArgs(cfg.DB))
+	if err == nil {
+		err = conn.Ping()
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	database, err := db.NewDB(conn)
 	if err != nil {
 		log.Fatal(err)
 	}
