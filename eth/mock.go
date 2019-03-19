@@ -13,11 +13,10 @@ import (
 )
 
 type MockClient struct {
-	Acc   map[string]*bind.TransactOpts
-	NetID *big.Int
-	Block *types.Block
-
-	backend *backends.SimulatedBackend
+	Acc     map[string]*bind.TransactOpts
+	NetID   *big.Int
+	Block   *types.Block
+	Backend *backends.SimulatedBackend
 }
 
 func NewMockClient() *MockClient {
@@ -42,12 +41,12 @@ func (c *MockClient) SendTransaction(ctx context.Context,
 
 	acc := c.Acc[strings.ToLower(from.String())]
 
-	nonce, err := c.backend.NonceAt(context.Background(), acc.From, nil)
+	nonce, err := c.Backend.NonceAt(context.Background(), acc.From, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	gasPrice, err := c.backend.SuggestGasPrice(context.Background())
+	gasPrice, err := c.Backend.SuggestGasPrice(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +55,7 @@ func (c *MockClient) SendTransaction(ctx context.Context,
 		amount, gasLimit, gasPrice, nil)
 
 	signTx, err := acc.Signer(types.HomesteadSigner{}, acc.From, rawTx)
-	if err := c.backend.SendTransaction(ctx, signTx); err != nil {
+	if err := c.Backend.SendTransaction(ctx, signTx); err != nil {
 		return nil, err
 	}
 

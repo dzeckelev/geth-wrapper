@@ -12,8 +12,8 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
-// GethClient describes Ethereum client interface.
-type GethClient interface {
+// Client describes Ethereum client interface.
+type Client interface {
 	Accounts(ctx context.Context) ([]string, error)
 	SendTransaction(ctx context.Context,
 		from, to common.Address, amount *big.Int) (*string, error)
@@ -26,8 +26,8 @@ type GethClient interface {
 	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
 }
 
-// Client is an Ethereum JSON-RPC client.
-type Client struct {
+// GethClient is an Ethereum JSON-RPC client.
+type GethClient struct {
 	rpcCli *rpc.Client
 	ethCli *ethclient.Client
 }
@@ -42,7 +42,7 @@ type SendTxArgs struct {
 }
 
 // NewClient creates a new  Ethereum JSON-RPC client.
-func NewClient(ctx context.Context, url string) (*Client, error) {
+func NewClient(ctx context.Context, url string) (*GethClient, error) {
 	rpcClient, err := rpc.DialContext(ctx, url)
 	if err != nil {
 		return nil, err
@@ -50,19 +50,19 @@ func NewClient(ctx context.Context, url string) (*Client, error) {
 
 	ethCli := ethclient.NewClient(rpcClient)
 
-	return &Client{
+	return &GethClient{
 		rpcCli: rpcClient,
 		ethCli: ethCli,
 	}, nil
 }
 
 // Close closes an Ethereum JSON-RPC client.
-func (c *Client) Close() {
+func (c *GethClient) Close() {
 	c.Close()
 }
 
 // Accounts gets accounts from Geth node.
-func (c *Client) Accounts(ctx context.Context) ([]string, error) {
+func (c *GethClient) Accounts(ctx context.Context) ([]string, error) {
 	var result []string
 	err := c.rpcCli.CallContext(ctx, &result, "personal_listAccounts")
 	return result, err
@@ -70,7 +70,7 @@ func (c *Client) Accounts(ctx context.Context) ([]string, error) {
 
 // SendTransaction sends a transaction through Geth node.
 // Account must be unlocked.
-func (c *Client) SendTransaction(ctx context.Context,
+func (c *GethClient) SendTransaction(ctx context.Context,
 	from, to common.Address, amount *big.Int) (result *string, err error) {
 	gas := uint64(34000)
 
@@ -92,26 +92,26 @@ func (c *Client) SendTransaction(ctx context.Context,
 	return result, err
 }
 
-func (c *Client) NetworkID(ctx context.Context) (*big.Int, error) {
+func (c *GethClient) NetworkID(ctx context.Context) (*big.Int, error) {
 	return c.ethCli.NetworkID(ctx)
 }
 
-func (c *Client) BlockByNumber(ctx context.Context,
+func (c *GethClient) BlockByNumber(ctx context.Context,
 	number *big.Int) (*types.Block, error) {
 	return c.ethCli.BlockByNumber(ctx, number)
 }
 
-func (c *Client) TransactionReceipt(ctx context.Context,
+func (c *GethClient) TransactionReceipt(ctx context.Context,
 	txHash common.Hash) (*types.Receipt, error) {
 	return c.ethCli.TransactionReceipt(ctx, txHash)
 }
 
-func (c *Client) BalanceAt(ctx context.Context, account common.Address,
+func (c *GethClient) BalanceAt(ctx context.Context, account common.Address,
 	blockNumber *big.Int) (*big.Int, error) {
 	return c.ethCli.BalanceAt(ctx, account, blockNumber)
 }
 
-func (c *Client) SyncProgress(
+func (c *GethClient) SyncProgress(
 	ctx context.Context) (*ethereum.SyncProgress, error) {
 	return c.ethCli.SyncProgress(ctx)
 }

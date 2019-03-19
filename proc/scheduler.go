@@ -27,7 +27,7 @@ type Scheduler struct {
 	cfg      *config.Config
 	cancel   context.CancelFunc
 	ctx      context.Context
-	eth      *eth.Client
+	eth      *eth.GethClient
 	db       *reform.DB
 	updBalCh chan []string
 
@@ -39,7 +39,7 @@ type Scheduler struct {
 
 // NewScheduler creates a new task scheduler.
 func NewScheduler(ctx context.Context, networkID *big.Int, cfg *config.Config,
-	database *reform.DB, ethClient *eth.Client) (*Scheduler, error) {
+	database *reform.DB, ethClient *eth.GethClient) (*Scheduler, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	return &Scheduler{

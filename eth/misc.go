@@ -8,7 +8,7 @@ import (
 )
 
 // WaitSync waits for the synchronization of the Geth node.
-func WaitSync(ctx context.Context, client GethClient,
+func WaitSync(ctx context.Context, client Client,
 	pauseTime time.Duration) error {
 	for {
 		progress, err := client.SyncProgress(ctx)

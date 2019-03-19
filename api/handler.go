@@ -20,7 +20,7 @@ import (
 // Handler is an API RPC handler.
 type Handler struct {
 	database  *reform.DB
-	ethClient *eth.Client
+	ethClient eth.Client
 	networkID *big.Int
 
 	// Mutex is needed to synchronize requests.
@@ -40,7 +40,7 @@ type GetLastResult struct {
 
 // NewHandler creates a new handler.
 func NewHandler(networkID *big.Int,
-	database *reform.DB, ethClient *eth.Client) *Handler {
+	database *reform.DB, ethClient eth.Client) *Handler {
 	return &Handler{
 		networkID: networkID,
 		database:  database,
