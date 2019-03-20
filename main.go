@@ -13,6 +13,7 @@ import (
 	"github.com/dzeckelev/geth-wrapper/config"
 	"github.com/dzeckelev/geth-wrapper/db"
 	"github.com/dzeckelev/geth-wrapper/eth"
+	"github.com/dzeckelev/geth-wrapper/gen"
 	"github.com/dzeckelev/geth-wrapper/proc"
 )
 
@@ -79,7 +80,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	handler := api.NewHandler(netID, database, ethClient)
+	handler := api.NewHandler(netID, database, ethClient, gen.NewUUID)
 	srv, err := api.NewServer(cfg)
 	if err != nil {
 		log.Fatal(err)

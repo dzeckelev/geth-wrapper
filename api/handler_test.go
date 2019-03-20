@@ -1,7 +1,7 @@
 package api_test
 
 import (
-	"database/sql"
+	"context"
 	"database/sql/driver"
 	"fmt"
 	"math/big"
@@ -16,6 +16,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/crypto"
 	"gopkg.in/reform.v1"
@@ -30,17 +31,19 @@ import (
 const gasLimit uint64 = 4700000
 
 var (
-	handler   *api.Handler
-	dataBase  *reform.DB
-	sqlMock   sqlmock.Sqlmock
 	ethClient *eth.MockClient
 	columns   = []string{"o_id", "o_hash", "o_from", "o_to", "o_amount",
 		"o_status", "o_block", "o_timestamp", "o_marked", "o_confirmations"}
+	network = big.NewInt(4)
 )
 
-func newEthClient() *eth.MockClient {
+func genNewAccount() *bind.TransactOpts {
 	key, _ := crypto.GenerateKey()
-	opts := bind.NewKeyedTransactor(key)
+	return bind.NewKeyedTransactor(key)
+}
+
+func newEthClient() *eth.MockClient {
+	opts := genNewAccount()
 	addr := strings.ToLower(opts.From.String())
 
 	balance := "1000000000000000000000000000000000000000000000000000"
@@ -57,6 +60,19 @@ func newEthClient() *eth.MockClient {
 		Block:   nil,
 		Backend: sim,
 	}
+}
+
+func newDB(t *testing.T) (*reform.DB, sqlmock.Sqlmock) {
+	sqlDB, sqlMock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dataBase, err := db.NewDB(sqlDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dataBase, sqlMock
 }
 
 func newTestTx() *data.Transaction {
@@ -114,7 +130,7 @@ func checkDate(t *testing.T, str string, timestamp *uint64) {
 	}
 }
 
-func checkGetLast(t *testing.T,
+func checkGetLast(t *testing.T, handler *api.Handler,
 	limit uint64, expected int) []api.GetLastResult {
 	result, err := handler.GetLast(limit)
 	if err != nil {
@@ -129,6 +145,9 @@ func checkGetLast(t *testing.T,
 }
 
 func TestGetLast(t *testing.T) {
+	dataBase, sqlMock := newDB(t)
+	handler := api.NewHandler(network, dataBase, ethClient, nil)
+
 	limit := uint64(100)
 	confirmations := uint64(3)
 
@@ -141,7 +160,7 @@ func TestGetLast(t *testing.T) {
 	sqlMock.ExpectQuery(expSelectSQL).
 		WithArgs(confirmations, limit).WillReturnRows(sqlmock.NewRows(columns))
 
-	checkGetLast(t, limit, 0)
+	checkGetLast(t, handler, limit, 0)
 
 	// Normal test.
 	sqlMock.ExpectQuery(expSelectSQL).
@@ -153,7 +172,7 @@ func TestGetLast(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(1, 1))
 	}
 
-	result := checkGetLast(t, limit, 2)
+	result := checkGetLast(t, handler, limit, 2)
 
 	for k := range result {
 		checkFiled(t, result[k].Confirmations, txs[k].Confirmations)
@@ -168,29 +187,39 @@ func TestGetLast(t *testing.T) {
 	}
 }
 
-func testMain(m *testing.M) int {
-	var err error
-	var sqlDB *sql.DB
+func TestHandlerSendETH(t *testing.T) {
+	dataBase, sqlMock := newDB(t)
+	handler := api.NewHandler(network, dataBase, ethClient, gen.NewUUID)
 
-	sqlDB, sqlMock, err = sqlmock.New()
+	accounts, err := ethClient.Accounts(context.Background())
 	if err != nil {
-		return 1
+		t.Fatal(err)
 	}
 
-	dataBase, err = db.NewDB(sqlDB)
+	opts := genNewAccount()
+	to := strings.ToLower(opts.From.String())
+
+	expUpdateSQL := `UPDATE "outputs"`
+
+	sqlMock.ExpectExec(expUpdateSQL).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	hash, err := handler.SendETH(accounts[0], to, "10000")
 	if err != nil {
-		return 1
+		t.Fatal(err)
 	}
 
-	defer db.CloseDB(dataBase)
+	if err := sqlMock.ExpectationsWereMet(); err != nil {
+		t.Errorf("there were unfulfilled expectations: %s", err)
+	}
 
-	ethClient = newEthClient()
-
-	handler = api.NewHandler(big.NewInt(4), dataBase, ethClient)
-
-	return m.Run()
+	_, err = hexutil.Decode(*hash)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestMain(m *testing.M) {
-	os.Exit(testMain(m))
+	ethClient = newEthClient()
+	os.Exit(m.Run())
 }

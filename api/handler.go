@@ -19,9 +19,10 @@ import (
 
 // Handler is an API RPC handler.
 type Handler struct {
-	database  *reform.DB
-	ethClient eth.Client
-	networkID *big.Int
+	database    *reform.DB
+	ethClient   eth.Client
+	genUUIDFunc func() string
+	networkID   *big.Int
 
 	// Mutex is needed to synchronize requests.
 	mtx sync.Mutex
@@ -39,12 +40,13 @@ type GetLastResult struct {
 }
 
 // NewHandler creates a new handler.
-func NewHandler(networkID *big.Int,
-	database *reform.DB, ethClient eth.Client) *Handler {
+func NewHandler(networkID *big.Int, database *reform.DB,
+	ethClient eth.Client, genUUIDFunc func() string) *Handler {
 	return &Handler{
-		networkID: networkID,
-		database:  database,
-		ethClient: ethClient,
+		networkID:   networkID,
+		database:    database,
+		genUUIDFunc: genUUIDFunc,
+		ethClient:   ethClient,
 	}
 }
 
