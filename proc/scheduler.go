@@ -241,9 +241,6 @@ func (s *Scheduler) collectTxs() error {
 				block.Number()).Uint64()
 		}
 
-		concurrency := runtime.NumCPU()
-		sem := make(chan struct{}, concurrency)
-
 		var accountsToUpdate []string
 		var transactions []*data.Transaction
 
@@ -258,13 +255,16 @@ func (s *Scheduler) collectTxs() error {
 			}
 		}()
 
-		for k := range txs {
+		sem := make(chan struct{}, runtime.NumCPU())
+
+		for _, tx := range txs {
 			sem <- struct{}{}
 
-			tx := txs[k]
-			go s.checkTransaction(sem, tx, signer, accounts, confirm,
-				block.Number(), block.Time(), results)
-
+			go func(tx *types.Transaction) {
+				defer func() { <-sem }()
+				s.checkTransaction(tx, signer, accounts, confirm,
+					block.Number(), block.Time(), results)
+			}(tx)
 		}
 
 		for i := 0; i < cap(sem); i++ {
@@ -349,10 +349,9 @@ func (s *Scheduler) updateTransactions() {
 }
 
 func (s *Scheduler) checkTransaction(
-	sem chan struct{}, transaction *types.Transaction, signer types.Signer,
+	transaction *types.Transaction, signer types.Signer,
 	accounts map[common.Address]struct{}, confirmations uint64, block,
 	timestamp *big.Int, results chan *result) {
-	defer func() { <-sem }()
 
 	from, err := signer.Sender(transaction)
 	if err != nil {
