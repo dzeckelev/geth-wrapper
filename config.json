@@ -8,7 +8,7 @@
   },
   "Eth": {
     "NodeURL": "http://localhost:8545",
-    "StartBlock": 3915904
+    "StartBlock": 4074490
   },
   "API": {
     "Addr": "localhost:8081"
