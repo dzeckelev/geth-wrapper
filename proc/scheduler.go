@@ -350,8 +350,8 @@ func (s *Scheduler) updateTransactions() {
 
 func (s *Scheduler) checkTransaction(
 	transaction *types.Transaction, signer types.Signer,
-	accounts map[common.Address]struct{}, confirmations uint64, block,
-	timestamp *big.Int, results chan *result) {
+	accounts map[common.Address]struct{}, confirmations uint64, block *big.Int,
+	timestamp uint64, results chan *result) {
 
 	from, err := signer.Sender(transaction)
 	if err != nil {
@@ -443,7 +443,7 @@ func (s *Scheduler) updateAccounts() {
 }
 
 func fillTransaction(hash common.Hash, from, to common.Address,
-	amount, blockNumber, blockTimestamp *big.Int,
+	amount, blockNumber *big.Int, blockTimestamp uint64,
 	confirmations uint64) *data.Transaction {
 	return &data.Transaction{
 		ID:            gen.NewUUID(),
@@ -452,7 +452,7 @@ func fillTransaction(hash common.Hash, from, to common.Address,
 		To:            strings.ToLower(to.String()),
 		Amount:        amount.String(),
 		Block:         pointer.ToUint64(blockNumber.Uint64()),
-		Timestamp:     pointer.ToUint64(blockTimestamp.Uint64()),
+		Timestamp:     pointer.ToUint64(blockTimestamp),
 		Confirmations: confirmations,
 	}
 }

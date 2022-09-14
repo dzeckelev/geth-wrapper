@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"gopkg.in/reform.v1"
 	"math/big"
 	"strings"
 	"sync"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	"gopkg.in/reform.v1"
 
 	"github.com/dzeckelev/geth-wrapper/data"
 	"github.com/dzeckelev/geth-wrapper/eth"

@@ -55,7 +55,7 @@ func (c *MockClient) SendTransaction(ctx context.Context,
 	rawTx := types.NewTransaction(nonce, to,
 		amount, gasLimit, gasPrice, nil)
 
-	signTx, err := acc.Signer(types.HomesteadSigner{}, acc.From, rawTx)
+	signTx, err := acc.Signer(acc.From, rawTx)
 	if err := c.Backend.SendTransaction(ctx, signTx); err != nil {
 		return nil, err
 	}
@@ -102,5 +102,5 @@ func NewTestBlock(number *big.Int, txs []*types.Transaction,
 		Number: number,
 	}
 
-	return types.NewBlock(header, txs, nil, trx)
+	return types.NewBlock(header, txs, nil, trx, nil)
 }
